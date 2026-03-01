@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String      @id @default(cuid())
+  name          String?
+  email         String      @unique
+  password      String?     // hashed, null если OAuth
+  image         String?
+  createdAt     DateTime    @default(now())
+  wishlists     Wishlist[]
+  reservations  Reservation[]
+  contributions Contribution[]
+}
+
+model Wishlist {
+  id          String         @id @default(cuid())
+  slug        String         @unique
+  title       String
+  description String?
+  occasion    String?
+  eventDate   DateTime?
+  coverColor  String         @default("#6366f1")
+  isPublic    Boolean        @default(true)
+  ownerId     String
+  owner       User           @relation(fields: [ownerId], references: [id])
+  items       WishlistItem[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model WishlistItem {
+  id            String         @id @default(cuid())
+  wishlistId    String
+  wishlist      Wishlist       @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  price         Decimal?       @db.Decimal(10, 2)
+  currency      String         @default("RUB")
+  imageUrl      String?
+  productUrl    String?
+  priority      Int            @default(1)
+  status        ItemStatus     @default(AVAILABLE)
+  isGroupGift   Boolean        @default(false)
+  targetAmount  Decimal?       @db.Decimal(10, 2)
+  reservation   Reservation?
+  contributions Contribution[]
+  createdAt     DateTime       @default(now())
+  position      Int            @default(0)
+}
+
+enum ItemStatus {
+  AVAILABLE
+  RESERVED
+  COLLECTING
+  FULFILLED
+  UNAVAILABLE
+}
+
+model Reservation {
+  id        String       @id @default(cuid())
+  itemId    String       @unique
+  item      WishlistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id])
+  guestName String?
+  guestEmail String?
+  guestToken String?     @unique // для отмены брони гостем
+  message   String?
+  notifyOnEvent Boolean  @default(false)
+  createdAt DateTime    @default(now())
+}
+
+model Contribution {
+  id        String       @id @default(cuid())
+  itemId    String
+  item      WishlistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id])
+  guestName String?
+  guestEmail String?
+  amount    Decimal      @db.Decimal(10, 2)
+  message   String?
+  status    ContribStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+}
+
+enum ContribStatus {
+  ACTIVE
+  REFUNDED
+  CANCELLED
+}
