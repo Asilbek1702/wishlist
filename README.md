@@ -1,80 +1,89 @@
-# Вишлист — приложение для создания вишлистов с real-time обновлениями
+# 🎁 Вишлист
 
-Production-ready приложение для создания вишлистов. Создавай списки желаний, делись с друзьями — они сами забронируют подарки.
+> **[🔗 Живое приложение](https://wishlist-app.vercel.app)** | **[GitHub](https://github.com/Asilbek1702/wishlist)**
+
+Production-ready приложение для создания вишлистов с real-time обновлениями. Создавай списки желаний, делись с друзьями — они сами забронируют подарки, чтобы не повторяться.
+
+## Возможности
+
+- Регистрация и вход (email + Google OAuth)
+- Создание вишлистов с цветом обложки и датой события
+- Добавление товаров с **автозаполнением по URL** (название, цена, картинка)
+- Публичная страница — доступна **без регистрации**
+- Бронирование подарков гостями без регистрации
+- **Групповой сбор** с прогресс-баром
+- **Real-time обновления** через Pusher WebSocket
+- Владелец **не видит** кто что забронировал
+- Конфетти при бронировании 🎉
+- Адаптивный дизайн (мобайл-фёрст)
 
 ## Стек
 
 - **Frontend:** Next.js 14 (App Router) + TypeScript + Tailwind + Framer Motion
-- **Database:** PostgreSQL + Prisma
+- **Database:** PostgreSQL + Prisma ORM
 - **Auth:** NextAuth.js v5 (Email/Password + Google OAuth)
-- **Real-time:** Pusher (WebSocket)
+- **Real-time:** Pusher WebSocket
 - **Scraping:** Cheerio (auto-fill по URL)
+- **Deploy:** Vercel + Railway
 
 ## Быстрый старт
 
-1. **Клонируй и установи зависимости:**
-   ```bash
-   npm install
-   ```
+```bash
+# Установи зависимости
+npm install
 
-2. **Настрой переменные окружения:**
-   ```bash
-   cp .env.example .env.local
-   ```
-   Заполни `.env.local` (см. `.env.example`).
+# Настрой переменные окружения
+cp .env.example .env.local
+# Заполни .env.local своими ключами
 
-3. **Подними базу и выполни миграции:**
-   ```bash
-   npx prisma db push
-   # или для разработки с миграциями:
-   npx prisma migrate dev
-   ```
+# Применить схему БД
+npx prisma db push
 
-4. **Запусти dev-сервер:**
-   ```bash
-   npm run dev
-   ```
+# Запустить dev-сервер
+npm run dev
+```
 
 ## Переменные окружения
 
 | Переменная | Описание |
-|-----------|----------|
+|---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
-| `NEXTAUTH_SECRET` | Секрет для NextAuth (openssl rand -base64 32) |
-| `NEXTAUTH_URL` | URL приложения (например https://your-app.vercel.app) |
+| `AUTH_SECRET` | Секрет NextAuth v5 (`openssl rand -base64 32`) |
+| `AUTH_URL` | URL приложения (например `https://your-app.vercel.app`) |
 | `GOOGLE_CLIENT_ID` | Google OAuth Client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret |
 | `PUSHER_APP_ID` | Pusher App ID |
 | `PUSHER_KEY` | Pusher Key |
 | `PUSHER_SECRET` | Pusher Secret |
-| `PUSHER_CLUSTER` | Pusher Cluster (например eu) |
-| `NEXT_PUBLIC_PUSHER_KEY` | Тот же ключ для клиента |
-| `NEXT_PUBLIC_PUSHER_CLUSTER` | Тот же кластер |
+| `PUSHER_CLUSTER` | Pusher Cluster (например `eu`) |
+| `NEXT_PUBLIC_PUSHER_KEY` | Тот же ключ (для клиента) |
+| `NEXT_PUBLIC_PUSHER_CLUSTER` | Тот же кластер (для клиента) |
 
-## Деплой
+> ⚠️ **Важно:** NextAuth v5 использует `AUTH_SECRET` и `AUTH_URL` вместо `NEXTAUTH_SECRET` и `NEXTAUTH_URL`
 
-1. **Railway:** создай PostgreSQL → скопируй `DATABASE_URL`
-2. **Pusher:** создай приложение → скопируй ключи
-3. **Google Cloud:** создай OAuth app → Client ID + Secret
-4. **Vercel:** импортируй репо, добавь env vars, деплой
-5. После деплоя: `npx prisma migrate deploy`
+## Деплой на Vercel + Railway
 
-## Структура
+1. **Railway** → создай PostgreSQL → скопируй `DATABASE_URL`
+2. **Pusher** → [pusher.com](https://pusher.com) → создай app → скопируй ключи
+3. **Google Cloud Console** → создай OAuth credentials → `CLIENT_ID` + `SECRET`
+4. **Vercel** → импортируй репо → добавь все env vars → деплой
+5. После деплоя выполни: `npx prisma migrate deploy`
 
-- `/login`, `/register` — авторизация
-- `/dashboard` — список вишлистов
-- `/wishlist/new` — создание вишлиста
-- `/wishlist/[id]` — редактирование
-- `/w/[slug]` — публичная страница (без auth)
+## Маршруты
 
-## Функции
+| Маршрут | Описание |
+|---|---|
+| `/login` | Вход |
+| `/register` | Регистрация |
+| `/dashboard` | Мои вишлисты |
+| `/wishlist/new` | Создание вишлиста |
+| `/wishlist/[id]` | Редактирование |
+| `/w/[slug]` | Публичная страница (без auth) |
 
-- Регистрация и вход (email + Google)
-- Создание вишлистов с цветом и датой
-- Добавление товаров с auto-fill по URL
-- Публичная страница без авторизации
-- Бронирование товаров гостями
-- Групповой сбор с прогресс-баром
-- Real-time обновления через Pusher
-- Конфетти при бронировании
-- Toast-уведомления
+## Edge cases
+
+- **Товар удалён с активными взносами** → статус `UNAVAILABLE`, взносы `REFUNDED`, физически не удаляется
+- **Дата события прошла** → бейдж «Событие прошло», бронирование по-прежнему возможно
+- **Сумма сбора не набралась** → сбор продолжается, владелец решает сам
+- **Сумма превышает цель** → вклад автоматически обрезается до остатка, статус → `FULFILLED`
+- **Гость хочет снять бронь** → токен в localStorage, или связь с владельцем

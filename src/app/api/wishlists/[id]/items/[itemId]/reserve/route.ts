@@ -21,7 +21,7 @@ export async function POST(
 
   const wishlist = await prisma.wishlist.findUnique({
     where: { id },
-    include: { items: true, owner: true },
+    include: { items: true },
   });
 
   if (!wishlist) {
@@ -51,9 +51,15 @@ export async function POST(
     }
 
     const isAuth = !!session?.user;
-    const guestName = isAuth ? (session.user.name || session.user.email) : (parsed.data.guestName || "Гость");
-    const guestEmail = isAuth ? session.user.email : (parsed.data.guestEmail || null);
-    const guestToken = !isAuth ? crypto.randomBytes(32).toString("hex") : null;
+    const guestName = isAuth
+      ? session.user.name || session.user.email || "Пользователь"
+      : parsed.data.guestName || "Гость";
+    const guestEmail = isAuth
+      ? session.user.email
+      : parsed.data.guestEmail || null;
+    const guestToken = !isAuth
+      ? crypto.randomBytes(32).toString("hex")
+      : null;
 
     const reservation = await prisma.reservation.create({
       data: {
@@ -72,19 +78,20 @@ export async function POST(
       data: { status: "RESERVED" },
     });
 
-    const isOwner = session?.user?.id === wishlist.ownerId;
-    const maskedName = isOwner ? "Кто-то из друзей" : guestName;
-
-    await pusherServer.trigger(WISHLIST_CHANNEL(wishlist.slug), PUSHER_EVENTS.ITEM_RESERVED, {
-      itemId,
-      guestName: maskedName,
-      reservedAt: reservation.createdAt,
-    });
+    // Всегда слаём masked name — владелец не должен знать кто бронирует
+    await pusherServer.trigger(
+      WISHLIST_CHANNEL(wishlist.slug),
+      PUSHER_EVENTS.ITEM_RESERVED,
+      {
+        itemId,
+        guestName: "Кто-то из друзей",
+        reservedAt: reservation.createdAt,
+      }
+    );
 
     return NextResponse.json({
       success: true,
       token: guestToken,
-      reservation,
     });
   } catch (error) {
     console.error("Reserve error:", error);

@@ -21,7 +21,7 @@ export async function POST(
 
   const wishlist = await prisma.wishlist.findUnique({
     where: { id },
-    include: { items: true, owner: true },
+    include: { items: true },
   });
 
   if (!wishlist) {
@@ -30,7 +30,10 @@ export async function POST(
 
   const item = wishlist.items.find((i) => i.id === itemId);
   if (!item || !item.isGroupGift || !item.targetAmount) {
-    return NextResponse.json({ error: "Item not found or not a group gift" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Item not found or not a group gift" },
+      { status: 404 }
+    );
   }
 
   if (item.status === "FULFILLED") {
@@ -41,10 +44,7 @@ export async function POST(
   }
 
   if (item.status === "UNAVAILABLE") {
-    return NextResponse.json(
-      { error: "Товар недоступен" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Товар недоступен" }, { status: 400 });
   }
 
   try {
@@ -61,15 +61,12 @@ export async function POST(
     const minAmount = Math.max(50, target * 0.01);
     if (parsed.data.amount < minAmount) {
       return NextResponse.json(
-        { error: `Минимальная сумма ${minAmount} ₽` },
+        { error: `Минимальная сумма ${Math.round(minAmount)} ₽` },
         { status: 400 }
       );
     }
 
     const isAuth = !!session?.user;
-    const contributorName = isAuth
-      ? (session.user.name || session.user.email)
-      : (parsed.data.guestName || "Участник");
 
     const result = await prisma.$transaction(async (tx) => {
       const currentItem = await tx.wishlistItem.findUnique({
@@ -87,21 +84,18 @@ export async function POST(
       );
       const remaining = targetAmount - collected;
 
-      if (remaining <= 0) {
-        throw new Error("Сбор уже завершён, спасибо!");
-      }
+      if (remaining <= 0) throw new Error("Сбор уже завершён, спасибо!");
 
+      // Обрезаем сумму если превышает остаток
       let amount = parsed.data.amount;
-      if (amount > remaining) {
-        amount = remaining;
-      }
+      if (amount > remaining) amount = remaining;
 
       const contribution = await tx.contribution.create({
         data: {
           itemId,
           userId: session?.user?.id ?? null,
-          guestName: isAuth ? null : parsed.data.guestName,
-          guestEmail: isAuth ? null : (parsed.data.guestEmail || null),
+          guestName: isAuth ? null : parsed.data.guestName ?? null,
+          guestEmail: isAuth ? null : parsed.data.guestEmail || null,
           amount: new Decimal(amount),
           message: parsed.data.message || null,
         },
@@ -115,28 +109,27 @@ export async function POST(
         data: { status: newStatus },
       });
 
-      return {
-        contribution,
-        totalCollected: newTotal,
-        status: newStatus,
-        amount,
-      };
+      return { contribution, totalCollected: newTotal, status: newStatus, amount };
     });
 
-    const maskedName = session?.user?.id === wishlist.ownerId ? "Кто-то из друзей" : contributorName;
-
-    await pusherServer.trigger(WISHLIST_CHANNEL(wishlist.slug), PUSHER_EVENTS.CONTRIBUTION_ADDED, {
-      itemId,
-      amount: result.amount,
-      totalCollected: result.totalCollected,
-      contributorName: maskedName,
-    });
+    // Всегда masked — владелец не видит кто скидывается
+    await pusherServer.trigger(
+      WISHLIST_CHANNEL(wishlist.slug),
+      PUSHER_EVENTS.CONTRIBUTION_ADDED,
+      {
+        itemId,
+        amount: result.amount,
+        totalCollected: result.totalCollected,
+        contributorName: "Кто-то из друзей",
+      }
+    );
 
     if (result.status === "FULFILLED") {
-      await pusherServer.trigger(WISHLIST_CHANNEL(wishlist.slug), PUSHER_EVENTS.ITEM_STATUS_CHANGED, {
-        itemId,
-        status: "FULFILLED",
-      });
+      await pusherServer.trigger(
+        WISHLIST_CHANNEL(wishlist.slug),
+        PUSHER_EVENTS.ITEM_STATUS_CHANGED,
+        { itemId, status: "FULFILLED" }
+      );
     }
 
     return NextResponse.json({

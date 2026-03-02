@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { pusherServer, WISHLIST_CHANNEL, PUSHER_EVENTS } from "@/lib/pusher";
 
 const updateItemSchema = z.object({
   title: z.string().min(1).optional(),
@@ -58,6 +59,10 @@ export async function PATCH(
       data: parsed.data,
     });
 
+    await pusherServer.trigger(WISHLIST_CHANNEL(wishlist.slug), PUSHER_EVENTS.ITEM_UPDATED, {
+      item: updated,
+    });
+
     return NextResponse.json(updated);
   } catch (error) {
     console.error("Update item error:", error);
@@ -89,12 +94,48 @@ export async function DELETE(
 
   const item = await prisma.wishlistItem.findFirst({
     where: { id: itemId, wishlistId: id },
+    include: {
+      contributions: { where: { status: "ACTIVE" } },
+    },
   });
 
   if (!item) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
 
+  // EDGE CASE: Если есть активные взносы — мягкое удаление
+  if (item.contributions.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      // Помечаем товар как недоступный
+      await tx.wishlistItem.update({
+        where: { id: itemId },
+        data: { status: "UNAVAILABLE" },
+      });
+      // Помечаем все взносы как возврат
+      await tx.contribution.updateMany({
+        where: { itemId, status: "ACTIVE" },
+        data: { status: "REFUNDED" },
+      });
+    });
+
+    await pusherServer.trigger(WISHLIST_CHANNEL(wishlist.slug), PUSHER_EVENTS.ITEM_STATUS_CHANGED, {
+      itemId,
+      status: "UNAVAILABLE",
+    });
+
+    return NextResponse.json({
+      success: true,
+      soft: true,
+      message: "Товар помечен как недоступен — были активные взносы",
+    });
+  }
+
+  // Нет взносов — физическое удаление
   await prisma.wishlistItem.delete({ where: { id: itemId } });
+
+  await pusherServer.trigger(WISHLIST_CHANNEL(wishlist.slug), PUSHER_EVENTS.ITEM_DELETED, {
+    itemId,
+  });
+
   return NextResponse.json({ success: true });
 }

@@ -52,14 +52,16 @@ export function ReserveModal({
 }: ReserveModalProps) {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
-  const [showUnreserve] = useState(hasExistingReservation ?? false);
 
+  // FIX: используем prop напрямую, не через useState
+  const showUnreserve = hasExistingReservation ?? false;
   const isAuth = !!session?.user;
 
   const {
     register,
     handleSubmit,
     formState: { errors },
+    reset,
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -95,6 +97,7 @@ export function ReserveModal({
 
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
       toast.success("Отлично! Подарок за тобой 🎉");
+      reset();
       onOpenChange(false);
       onSuccess?.();
     } catch (e) {
@@ -105,19 +108,24 @@ export function ReserveModal({
   };
 
   const onUnreserve = async () => {
-    const token = reservationToken ?? localStorage.getItem(`reservation-${itemId}`);
-    if (!token) {
-      toast.error(`Напиши ${ownerEmail} чтобы снять бронь`);
+    const token =
+      reservationToken ?? localStorage.getItem(`reservation-${itemId}`);
+    if (!token && !session?.user) {
+      toast.info(
+        ownerEmail
+          ? `Напиши ${ownerEmail} чтобы снять бронь`
+          : "Обратись к владельцу вишлиста"
+      );
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/wishlists/${wishlistId}/items/${itemId}/unreserve?token=${token}`,
-        { method: "DELETE" }
-      );
+      const url = `/api/wishlists/${wishlistId}/items/${itemId}/unreserve${
+        token ? `?token=${token}` : ""
+      }`;
+      const res = await fetch(url, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      localStorage.removeItem(`reservation-${itemId}`);
+      if (token) localStorage.removeItem(`reservation-${itemId}`);
       toast.success("Бронь снята");
       onOpenChange(false);
       onSuccess?.();
@@ -145,7 +153,11 @@ export function ReserveModal({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Отмена
               </Button>
-              <Button variant="danger" onClick={onUnreserve} disabled={loading}>
+              <Button
+                variant="danger"
+                onClick={onUnreserve}
+                disabled={loading}
+              >
                 {loading ? "..." : "Снять бронь"}
               </Button>
             </DialogFooter>
@@ -162,7 +174,9 @@ export function ReserveModal({
                     placeholder="Твоё имя"
                   />
                   {errors.guestName && (
-                    <p className="text-danger text-sm">{errors.guestName.message}</p>
+                    <p className="text-danger text-sm">
+                      {errors.guestName.message}
+                    </p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -174,10 +188,20 @@ export function ReserveModal({
                     placeholder="email@example.com"
                   />
                   {errors.guestEmail && (
-                    <p className="text-danger text-sm">{errors.guestEmail.message}</p>
+                    <p className="text-danger text-sm">
+                      {errors.guestEmail.message}
+                    </p>
                   )}
                 </div>
               </>
+            )}
+            {isAuth && (
+              <p className="text-sm text-muted">
+                Бронируешь как{" "}
+                <span className="font-medium text-foreground">
+                  {session.user.name || session.user.email}
+                </span>
+              </p>
             )}
             <div className="space-y-2">
               <Label htmlFor="message">Сообщение (необязательно)</Label>
@@ -189,20 +213,21 @@ export function ReserveModal({
               />
             </div>
             <div className="flex items-center gap-2">
-              <Checkbox
-                id="notifyOnEvent"
-                {...register("notifyOnEvent")}
-              />
-              <Label htmlFor="notifyOnEvent">
+              <Checkbox id="notifyOnEvent" {...register("notifyOnEvent")} />
+              <Label htmlFor="notifyOnEvent" className="cursor-pointer">
                 Уведомить на email когда дата события наступит
               </Label>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
                 Отменить
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "..." : "Забронировать"}
+                {loading ? "Бронируем..." : "Забронировать"}
               </Button>
             </DialogFooter>
           </form>
