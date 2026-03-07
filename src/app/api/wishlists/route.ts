@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { generateSlug } from "@/lib/utils";
+import { getMobileSession } from "@/lib/mobile-auth";
 
 const createSchema = z.object({
   title: z.string().min(1, "Введите название"),
@@ -13,8 +13,8 @@ const createSchema = z.object({
   isPublic: z.boolean().default(true),
 });
 
-export async function GET() {
-  const session = await auth();
+export async function GET(req: Request) {
+  const session = await getMobileSession(req);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -32,7 +32,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
+  const session = await getMobileSession(req);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
