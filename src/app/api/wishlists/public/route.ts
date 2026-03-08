@@ -6,7 +6,7 @@ export async function GET() {
     where: { isPublic: true },
     include: {
       items: true,
-      user: { select: { name: true, email: true } },
+      owner: { select: { name: true, email: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 50,
